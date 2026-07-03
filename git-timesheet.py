@@ -163,27 +163,42 @@ def parse_work_hours(value: str) -> tuple[time, time]:
     return start, end
 
 
+UNIT_SECONDS = {
+    "second": 1,
+    "sec": 1,
+    "minute": 60,
+    "min": 60,
+    "hour": 3600,
+    "hr": 3600,
+    "day": 86400,
+    "week": 7 * 86400,
+    "month": 30 * 86400,
+    "year": 365 * 86400,
+}
+
+RELATIVE_SINCE_RE = re.compile(
+    r"^(\d+)\s*(second|sec|minute|min|hour|hr|day|week|month|year)s?(?:\s+ago)?$"
+)
+
+
 def parse_since(value: str) -> datetime:
     """Parse --since values for git or explicit dates."""
     lowered = value.strip().lower()
     now = datetime.now().astimezone()
 
-    relative = {
+    fixed = {
         "now": timedelta(0),
         "today": timedelta(0),
         "yesterday": timedelta(days=1),
-        "1 day": timedelta(days=1),
-        "1 day ago": timedelta(days=1),
-        "24 hours": timedelta(hours=24),
-        "24 hours ago": timedelta(hours=24),
-        "1 week": timedelta(days=7),
-        "1 week ago": timedelta(days=7),
-        "7 days": timedelta(days=7),
-        "7 days ago": timedelta(days=7),
     }
 
-    if lowered in relative:
-        return now - relative[lowered]
+    if lowered in fixed:
+        return now - fixed[lowered]
+
+    match = RELATIVE_SINCE_RE.match(lowered)
+    if match:
+        amount, unit = match.groups()
+        return now - timedelta(seconds=int(amount) * UNIT_SECONDS[unit])
 
     for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
         try:
@@ -194,7 +209,7 @@ def parse_since(value: str) -> datetime:
 
     raise argparse.ArgumentTypeError(
         f"could not parse --since value '{value}' "
-        "(try: 1 day, 1 week, or 2026-05-18)"
+        "(try: 1 day, 2 weeks, 3 days ago, or 2026-05-18)"
     )
 
 
